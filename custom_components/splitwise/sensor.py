@@ -144,11 +144,11 @@ class SplitwiseApi:
 
 
 class SplitwiseSensor(Entity):
-    def __init__(self, hass, client_id, client_secret):
+    def __init__(self, hass, client_id, client_secret,client_api_key):
         """Initialize the sensor."""
         self.hass = hass
         self.hass_url = get_url(hass)
-        self.api = SplitwiseApi(self, client_id, client_secret,api_key=client_api_key)
+        self.api = SplitwiseApi(self, client_id, client_secret,client_api_key)
         self._state = None
         self._user_id = None
         self.currency = None
