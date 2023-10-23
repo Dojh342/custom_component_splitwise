@@ -79,7 +79,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
 
 
 class SplitwiseApi:
-    def __init__(self, sensor, client_id, client_secret):
+    def __init__(self, sensor, client_id, client_secret, client_api_key):
         self.sensor = sensor
         self.secret = None
         self.isAuthSuccess = False
