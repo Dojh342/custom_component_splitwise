@@ -19,6 +19,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_CLIENT_ID): cv.string,
         vol.Required(CONF_CLIENT_SECRET): cv.string,
+        vol.Required(CONF_CLIENT_API_KEY): cv.string,
     }
 )
 DATA_CALLBACK = "splitwise-callback"
@@ -73,7 +74,8 @@ def setup(hass, config):
 def setup_platform(hass, config, add_entities, discovery_info=None):
     client_id = config[CONF_CLIENT_ID]
     client_secret = config[CONF_CLIENT_SECRET]
-    add_entities([SplitwiseSensor(hass, client_id, client_secret)])
+    client_api_key = config[CONF_CLIENT_API_KEY]
+    add_entities([SplitwiseSensor(hass, client_id, client_secret,client_api_key)])
 
 
 class SplitwiseApi:
@@ -83,61 +85,62 @@ class SplitwiseApi:
         self.isAuthSuccess = False
         self.client_id = client_id
         self.client_secret = client_secret
+        self.client_api_key = client_api_key
         self.redirect_uri = None
         try:
             self.splitwise = Splitwise(
-                consumer_key=client_id, consumer_secret=client_secret
+                consumer_key=client_id, consumer_secret=client_secret,api_key=client_api_key
             )
         except Exception as e:
             raise Exception("Cannot initialize Splitwise Client:{}".format(e))
 
-    @property
-    def token_file_name(self):
-        # From config/custom_components/splitwise to config/
-        base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        token_file = _TOKEN_FILE
-        full_token_filepath = os.path.join(base_path, token_file)
-        return full_token_filepath
+    # @property
+    # def token_file_name(self):
+    #     # From config/custom_components/splitwise to config/
+    #     base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    #     token_file = _TOKEN_FILE
+    #     full_token_filepath = os.path.join(base_path, token_file)
+    #     return full_token_filepath
 
-    def get_access_token_from_file(self):
-        if not os.path.isfile(self.token_file_name):
-            self.get_credentials()
-            return
+    # def get_access_token_from_file(self):
+    #     if not os.path.isfile(self.token_file_name):
+    #         self.get_credentials()
+    #         return
 
-        with open(self.token_file_name, "r") as token_file:
-            token_data = json.loads(token_file.read()) or {}
+    #     with open(self.token_file_name, "r") as token_file:
+    #         token_data = json.loads(token_file.read()) or {}
 
-        if "access_token" not in token_data:
-            code = token_data.get("code")
-            if code:
-                self.get_access_token(code)
-        else:
-            self.isAuthSuccess = True
-            self.splitwise.setOAuth2AccessToken(token_data)
+    #     if "access_token" not in token_data:
+    #         code = token_data.get("code")
+    #         if code:
+    #             self.get_access_token(code)
+    #     else:
+    #         self.isAuthSuccess = True
+    #         self.splitwise.setOAuth2AccessToken(token_data)
 
-    @property
-    def is_authenticated(self):
-        return self.isAuthSuccess
+    # @property
+    # def is_authenticated(self):
+    #     return self.isAuthSuccess
 
-    def get_access_token(self, code):
-        with open(self.token_file_name, "r+") as token_file:
-            token_data = json.loads(token_file.read()) or {}
-        access_token = token_data.get("access_token")
-        if not access_token:
-            access_token = self.splitwise.getOAuth2AccessToken(
-                code, self.get_redirect_uri()
-            )
-        with open(self.token_file_name, "w+") as token_file:
-            token_file.write(json.dumps(access_token))
-        self.isAuthSuccess = True
-        self.splitwise.setOAuth2AccessToken(access_token)
+    # def get_access_token(self, code):
+    #     with open(self.token_file_name, "r+") as token_file:
+    #         token_data = json.loads(token_file.read()) or {}
+    #     access_token = token_data.get("access_token")
+    #     if not access_token:
+    #         access_token = self.splitwise.getOAuth2AccessToken(
+    #             code, self.get_redirect_uri()
+    #         )
+    #     with open(self.token_file_name, "w+") as token_file:
+    #         token_file.write(json.dumps(access_token))
+    #     self.isAuthSuccess = True
+    #     self.splitwise.setOAuth2AccessToken(access_token)
 
-    def get_credentials(self):
-        url, state = self.splitwise.getOAuth2AuthorizeURL(self.get_redirect_uri())
-        self.sensor.create_oauth_view(url)
+    # def get_credentials(self):
+    #     url, state = self.splitwise.getOAuth2AuthorizeURL(self.get_redirect_uri())
+    #     self.sensor.create_oauth_view(url)
 
-    def get_redirect_uri(self):
-        return "{}{}".format(self.sensor.hass_url, AUTH_CALLBACK_PATH)
+    # def get_redirect_uri(self):
+    #     return "{}{}".format(self.sensor.hass_url, AUTH_CALLBACK_PATH)
 
 
 class SplitwiseSensor(Entity):
@@ -145,7 +148,7 @@ class SplitwiseSensor(Entity):
         """Initialize the sensor."""
         self.hass = hass
         self.hass_url = get_url(hass)
-        self.api = SplitwiseApi(self, client_id, client_secret)
+        self.api = SplitwiseApi(self, client_id, client_secret,api_key=client_api_key)
         self._state = None
         self._user_id = None
         self.currency = None
@@ -154,7 +157,7 @@ class SplitwiseSensor(Entity):
         self._friends_list = {}
         self._group_map = {}
         self._id_map = {}
-        self.api.get_access_token_from_file()
+        # self.api.get_access_token_from_file()
 
     @property
     def name(self):
@@ -197,12 +200,12 @@ class SplitwiseSensor(Entity):
 
         This is the only method that should fetch new data for Home Assistant.
         """
-        self.api.get_access_token_from_file()
-        if not self.api.is_authenticated:
-            raise AuthenticationFailedException("error fetching authentication token")
-        self.hass.components.persistent_notification.dismiss(
-            notification_id=f"splitwise_setup_{SENSOR_NAME}"
-        )
+        # self.api.get_access_token_from_file()
+        # if not self.api.is_authenticated:
+        #     raise AuthenticationFailedException("error fetching authentication token")
+        # self.hass.components.persistent_notification.dismiss(
+        #     notification_id=f"splitwise_setup_{SENSOR_NAME}"
+        # )
         user = self.api.splitwise.getCurrentUser()
         self._user_id = user.getId()
         self.currency = user.getDefaultCurrency()
@@ -253,47 +256,47 @@ class SplitwiseSensor(Entity):
                     amount += float(d.getAmount())
             self._group_map[g.getName()] = amount
 
-    def create_oauth_view(self, auth_url):
-        try:
-            self.hass.http.register_view(
-                SplitwiseAuthCallbackView(self, self.api.token_file_name)
-            )
-        except Exception as e:
-            _LOGGER.error("Splitwise CallbackView Error {}".format(e))
-            return
+    # def create_oauth_view(self, auth_url):
+    #     try:
+    #         self.hass.http.register_view(
+    #             SplitwiseAuthCallbackView(self, self.api.token_file_name)
+    #         )
+    #     except Exception as e:
+    #         _LOGGER.error("Splitwise CallbackView Error {}".format(e))
+    #         return
 
-        self.hass.components.persistent_notification.create(
-            "In order to authorize Home-Assistant to view your Splitwise data, "
-            "you must visit: "
-            f'<a href="{auth_url}" target="_blank">{auth_url}</a>. Make '
-            f"sure that you have added {self.api.redirect_uri} to your "
-            "Redirect URIs on Splitwise Developer portal.",
-            title=SENSOR_NAME,
-            notification_id=f"splitwise_setup_{SENSOR_NAME}",
-        )
+    #     self.hass.components.persistent_notification.create(
+    #         "In order to authorize Home-Assistant to view your Splitwise data, "
+    #         "you must visit: "
+    #         f'<a href="{auth_url}" target="_blank">{auth_url}</a>. Make '
+    #         f"sure that you have added {self.api.redirect_uri} to your "
+    #         "Redirect URIs on Splitwise Developer portal.",
+    #         title=SENSOR_NAME,
+    #         notification_id=f"splitwise_setup_{SENSOR_NAME}",
+    #     )
 
 
-class SplitwiseAuthCallbackView(http.HomeAssistantView):
-    """Web view that handles OAuth authentication and redirection flow."""
+# class SplitwiseAuthCallbackView(http.HomeAssistantView):
+#     """Web view that handles OAuth authentication and redirection flow."""
 
-    requires_auth = False
-    url = AUTH_CALLBACK_PATH
-    name = "api:splitwise:callback"
+#     requires_auth = False
+#     url = AUTH_CALLBACK_PATH
+#     name = "api:splitwise:callback"
 
-    def __init__(self, sensor, token_file):
-        self.sensor = sensor
-        self.token_file_name = token_file
+#     def __init__(self, sensor, token_file):
+#         self.sensor = sensor
+#         self.token_file_name = token_file
 
-    @callback
-    async def get(self, request):  # pylint: disable=no-self-use
-        """Handle browser HTTP request."""
-        hass = request.app["hass"]
-        params = request.query
-        response = self.json_message("You can close this window now")
+#     @callback
+#     async def get(self, request):  # pylint: disable=no-self-use
+#         """Handle browser HTTP request."""
+#         hass = request.app["hass"]
+#         params = request.query
+#         response = self.json_message("You can close this window now")
 
-        code = params.get("code")
-        code_data = {"code": code}
-        with open(self.token_file_name, "w+") as token_file:
-            token_file.write(json.dumps(code_data))
-        await hass.async_add_executor_job(self.sensor.update)
-        return response
+#         code = params.get("code")
+#         code_data = {"code": code}
+#         with open(self.token_file_name, "w+") as token_file:
+#             token_file.write(json.dumps(code_data))
+#         await hass.async_add_executor_job(self.sensor.update)
+#         return response
