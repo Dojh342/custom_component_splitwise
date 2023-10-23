@@ -8,7 +8,7 @@ from homeassistant.core import callback
 import voluptuous as vol
 from .const import DOMAIN
 from homeassistant.components.sensor import PLATFORM_SCHEMA
-from homeassistant.const import CONF_CLIENT_SECRET, CONF_CLIENT_ID
+from homeassistant.const import CONF_CLIENT_SECRET, CONF_CLIENT_ID, CONF_CLIENT_API_KEY
 from splitwise import Splitwise
 import logging, os, json
 from homeassistant.helpers import network
